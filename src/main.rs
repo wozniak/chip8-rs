@@ -1,9 +1,10 @@
 mod chip8;
+mod tests;
 extern crate pixel_canvas;
 
 fn main() {
     let mut chip8 = chip8::Chip8::new();
-    chip8.load_rom("BC_test.ch8");
+    chip8.load_rom("tetris.ch8");
     println!("chip8 loaded");
 
     const WHITE: pixel_canvas::Color = pixel_canvas::Color { r: 255, g: 255, b: 255 };
@@ -17,7 +18,7 @@ fn main() {
         let width = image.width() as usize;
         for (y, row) in image.chunks_mut(width).enumerate() {
             for (x, pixel) in row.iter_mut().enumerate() {
-                if chip8.video[y][x] == 1 {
+                if chip8.video[x][y] == 1 {
                     *pixel = WHITE;
                 } else {
                     *pixel = BLACK;

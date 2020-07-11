@@ -2,19 +2,22 @@ use std::fs;
 use std::path::Path;
 use rand;
 
+const VIDEO_WIDTH: usize = 64;
+const VIDEO_HEIGHT: usize = 32;
+
 pub struct Chip8 {
-    registers: [u8; 16],
-    pub memory: [u8; 4096],
-    index: u16,
-    pc: u16,
-    stack: [u16; 16],
-    sp: usize,
-    delay_timer: u8,
-    sound_timer: u8,
-    pub keypad: [u8; 16],
-    pub video: [[u8; 64]; 32],
-    opcode: u16,
-    dostep: bool,
+    pub(crate) registers: [u8; 16],
+    pub(crate) memory: [u8; 4096],
+    pub(crate) index: u16,
+    pub(crate) pc: u16,
+    pub(crate) stack: [u16; 16],
+    pub(crate) sp: usize,
+    pub(crate) delay_timer: u8,
+    pub(crate) sound_timer: u8,
+    pub(crate) keypad: [u8; 16],
+    pub(crate) video: [[u8; VIDEO_HEIGHT]; VIDEO_WIDTH],
+    pub(crate) opcode: u16,
+    pub(crate) dostep: bool,
 }
 
 impl Chip8 {
@@ -48,7 +51,7 @@ impl Chip8 {
             delay_timer: 0,
             sound_timer: 0,
             keypad: [0; 16],
-            video: [[0; 64]; 32],
+            video: [[0; 32]; 64],
             opcode: 0,
             dostep: true,
         };
@@ -72,9 +75,9 @@ impl Chip8 {
         let n4 =  self.opcode & 0x000f;
 
         match (n1, n2, n3, n4) {
-            (0x0, 0x0, 0xE, 0x0) => { println!("CLS"); self.op_00e0(); },
+            (0x0, 0x0, 0xE, 0x0) => self.op_00e0(),
             (0x0, 0x0, 0xE, 0xE) => self.op_00ee(),
-            (0x1,   _,   _,   _) => { println!("JMP ${:x}", self.opcode & 0x0fff); self.op_1nnn(); },
+            (0x1,   _,   _,   _) => self.op_1nnn(),
             (0x2,   _,   _,   _) => self.op_2nnn(),
             (0x3,   _,   _,   _) => self.op_3xkk(),
             (0x4,   _,   _,   _) => self.op_4xkk(),
@@ -158,71 +161,86 @@ impl Chip8 {
         }
     }
 
-    fn op_00e0(&mut self) {
+    pub(crate) fn op_00e0(&mut self) {
         // clear display
-        self.video = [[0; 64]; 32];
+        println!("CLS");
+        self.video = [[0; 32]; 64];
     }
 
-    fn op_00ee(&mut self) {
+    pub(crate) fn op_00ee(&mut self) {
+        println!("RET");
         self.sp = self.sp - 1;
         self.pc = self.stack[self.sp];
     }
 
-    fn op_1nnn(&mut self) {
+    pub(crate) fn op_1nnn(&mut self) {
+        println!("JP ${:x}", self.opcode & 0x0fff);
         self.pc = self.opcode & 0x0fff;
-        self.dostep = false;
     }
 
-    fn op_2nnn(&mut self) {
+    pub(crate) fn op_2nnn(&mut self) {
+        println!("CALL ${:x}", self.opcode & 0x0fff);
         self.stack[self.sp] = self.pc;
         self.sp += 1;
         self.pc = self.opcode & 0x0fff;
     }
 
-    fn op_3xkk(&mut self) {
+    pub(crate) fn op_3xkk(&mut self) {
         let vx = (self.opcode & 0x0f00) as usize >> 8;
         let byte = self.opcode & 0x00ff;
 
-        if self.registers[vx as usize] != byte as u8 {
+        println!("SE V{:x} ({}), ${:x}", vx, self.registers[vx], byte);
+
+        if self.registers[vx as usize] == byte as u8 {
             self.pc += 2;
         }
     }
 
-    fn op_4xkk(&mut self) {
+    pub(crate) fn op_4xkk(&mut self) {
         let vx = (self.opcode & 0x0ff0) as usize >> 8;
         let byte = self.opcode & 0x00ff;
 
+        println!("SNE V{:x} ({}), ${:x}", vx, self.registers[vx], byte);
+
         if self.registers[vx as usize] != byte as u8 {
             self.pc += 2;
         }
     }
 
-    fn op_5xy0(&mut self) {
+    pub(crate) fn op_5xy0(&mut self) {
         let vx = (self.opcode & 0x0ff0) as usize >> 8;
         let vy = (self.opcode & 0x00f0) as usize >> 4;
 
-        if self.registers[vx as usize] != self.registers[vy as usize] {
+        println!("SE V{:x} ({}), V{:x} ({:x})", vx, self.registers[vx], vy, self.registers[vy]);
+
+        if self.registers[vx as usize] == self.registers[vy as usize] {
             self.pc += 2;
         }
     }
 
-    fn op_6xkk(&mut self) {
+    pub(crate) fn op_6xkk(&mut self) {
         let vx = (self.opcode & 0x0f00) as usize >> 8;
         let byte = self.opcode & 0x00ff;
+
+        println!("LD V{}, ${:x}", vx, byte);
 
         self.registers[vx as usize] = byte as u8;
     }
 
-    fn op_7xkk(&mut self) {
+    pub(crate) fn op_7xkk(&mut self) {
         let vx = (self.opcode & 0x0f00) as usize >> 8;
         let byte = self.opcode & 0x00ff;
+
+        println!("ADD V{}, ${:x}", vx, byte);
 
         self.registers[vx] = (self.registers[vx] as u16 + byte) as u8;
     }
 
-    fn op_8xy0(&mut self) {
+    pub(crate) fn op_8xy0(&mut self) {
         let vx = (self.opcode & 0x0ff0) as usize >> 8;
         let vy = (self.opcode & 0x00f0) as usize >> 4;
+
+        println!("LD V{}, V{}", vx, vy);
 
         self.registers[vx as usize] = self.registers[vy as usize];
     }
@@ -326,30 +344,29 @@ impl Chip8 {
     }
 
     fn op_dxyn(&mut self) {
-        let vx = (self.opcode & 0x0f00) as usize >> 8;
-        let vy = (self.opcode & 0x00f0) as usize >> 4;
-        let height = (self.opcode & 0x000f) as u8;
+        let vx = (self.opcode & 0x0F00) >> 8;
+        let vy = (self.opcode & 0x00F0) >> 4;
+        let height = self.opcode & 0x000F;
 
-        // wrap around screen
-        let x_pos = self.registers[vx] % 64;
-        let y_pos = self.registers[vy] % 32;
+        // Wrap if going beyond screen boundaries
+        let x_pos = self.registers[vx as usize] % VIDEO_WIDTH as u8;
+        let y_pos = self.registers[vy as usize] % VIDEO_HEIGHT as u8;
 
-        self.registers[0xf] = 0;
+        self.registers[0xF] = 0;
 
-        for row in 0..height {
-            let sprite_byte = self.memory[(self.index + row as u16) as usize];
-
+        for row in 0..height as u8 {
+            let sprite_byte = self.memory[(self.index + row as u16 ) as usize];
             for col in 0..8 {
-                let sprite_pixel = sprite_byte & (0x8 >> col);
-                let screen_pixel = &mut self.video[((x_pos + row) % 32) as usize][((y_pos + col) % 64) as usize];
+                let sprite_pixel = sprite_byte & (0x80 >> col);
+                let screen_pixel = &mut self.video[(x_pos + col) as usize][(y_pos + row) as usize];
 
-                if sprite_pixel == 1 {
+                // Sprite pixel is on
+                if sprite_pixel > 0 {
                     if *screen_pixel == 1 {
-                        self.registers[0xf] = 1;
-                        *screen_pixel = 0
-                    } else {
-                        *screen_pixel = 1;
+                        self.registers[0xF] = 1;
                     }
+
+                    *screen_pixel ^= 1;
                 }
             }
         }
